@@ -1,21 +1,20 @@
-# 发布流水线:打 tag(v*)时双平台打包并上传 GitHub Releases
-# macOS 与 Windows 分别构建;构建后立即用 --selftest 做产物健康检查。
-# 产物不可变原则:每个安装包附带 .sha256 校验和文件一并上传。
+# 打包流水线:push 到 main 时双平台构建,产物作为 workflow artifact 留存(30 天)。
+# 两平台均先跑 --selftest 冒烟检查;产物附带 .sha256 校验和。
 name: release
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-macos:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      # python.org 官方安装器自带 Tcl/Tk(brew python-tk 在受限环境有 TCC 问题)
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -32,13 +31,14 @@ jobs:
         run: ditto -c -k --sequesterRsrc --keepParent dist/PhotoTidy.app PhotoTidy-macos.zip
       - name: 生成 SHA256 校验和
         run: shasum -a 256 PhotoTidy-macos.zip > PhotoTidy-macos.zip.sha256
-      - uses: softprops/action-gh-release@v2
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
         with:
-          files: |
+          name: PhotoTidy-macos
+          path: |
             PhotoTidy-macos.zip
             PhotoTidy-macos.zip.sha256
-            LICENSE
-            THIRD_PARTY_NOTICES.md
+          retention-days: 30
 
   build-windows:
     runs-on: windows-latest
@@ -59,10 +59,11 @@ jobs:
         run: |
           $hash = (Get-FileHash -Algorithm SHA256 dist/PhotoTidy.exe).Hash.ToLower()
           "$hash  PhotoTidy.exe" | Out-File -Encoding ascii PhotoTidy.exe.sha256
-      - uses: softprops/action-gh-release@v2
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
         with:
-          files: |
+          name: PhotoTidy-windows
+          path: |
             dist/PhotoTidy.exe
             PhotoTidy.exe.sha256
-            LICENSE
-            THIRD_PARTY_NOTICES.md
+          retention-days: 30
