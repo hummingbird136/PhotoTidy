@@ -1,4 +1,4 @@
-# 打包流水线:push 到 main 时双平台构建,产物作为 workflow artifact 留存(30 天)。
+# 打包流水线:push 到 main 时双平台构建,上传到 Actions artifact 并更新「latest」Release。
 # 公开仓库的 macOS/Windows runner 免费,无需账单。
 # 两平台均先跑 --selftest 冒烟检查;产物附带 .sha256 校验和。
 name: release
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-macos:
@@ -32,7 +32,7 @@ jobs:
         run: ditto -c -k --sequesterRsrc --keepParent dist/PhotoTidy.app PhotoTidy-macos.zip
       - name: 生成 SHA256 校验和
         run: shasum -a 256 PhotoTidy-macos.zip > PhotoTidy-macos.zip.sha256
-      - name: 上传产物
+      - name: 上传 artifact
         uses: actions/upload-artifact@v4
         with:
           name: PhotoTidy-macos
@@ -40,6 +40,21 @@ jobs:
             PhotoTidy-macos.zip
             PhotoTidy-macos.zip.sha256
           retention-days: 30
+      - name: 更新 latest Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: latest
+          make_latest: true
+          overwrite: true
+          body: |
+            PhotoTidy 最新构建(main 分支自动打包)。
+
+            - macOS: 解压 PhotoTidy-macos.zip,将 PhotoTidy.app 拖到「应用程序」
+            - Windows: 双击 PhotoTidy.exe 运行(绿色软件,不写注册表)
+          files: |
+            PhotoTidy-macos.zip
+            PhotoTidy-macos.zip.sha256
 
   build-windows:
     runs-on: windows-latest
@@ -60,7 +75,7 @@ jobs:
         run: |
           $hash = (Get-FileHash -Algorithm SHA256 dist/PhotoTidy.exe).Hash.ToLower()
           "$hash  PhotoTidy.exe" | Out-File -Encoding ascii PhotoTidy.exe.sha256
-      - name: 上传产物
+      - name: 上传 artifact
         uses: actions/upload-artifact@v4
         with:
           name: PhotoTidy-windows
@@ -68,3 +83,18 @@ jobs:
             dist/PhotoTidy.exe
             PhotoTidy.exe.sha256
           retention-days: 30
+      - name: 更新 latest Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: latest
+          make_latest: true
+          overwrite: true
+          body: |
+            PhotoTidy 最新构建(main 分支自动打包)。
+
+            - macOS: 解压 PhotoTidy-macos.zip,将 PhotoTidy.app 拖到「应用程序」
+            - Windows: 双击 PhotoTidy.exe 运行(绿色软件,不写注册表)
+          files: |
+            dist/PhotoTidy.exe
+            PhotoTidy.exe.sha256
