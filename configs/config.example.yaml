@@ -1,0 +1,27 @@
+# PhotoTidy(拾光) 配置示例
+# 用法: phototidy --config configs/config.example.yaml <command> <dir>
+
+# 支持的媒体格式(扩展名,小写)
+image_formats:
+  - .jpg
+  - .jpeg
+  - .png
+  - .heic
+video_formats:
+  - .mp4
+  - .mov
+  - .avi
+
+# 归档日期目录格式(strftime),默认 YYYY-MM-DD
+date_folder_format: '%Y-%m-%d'
+
+# 重复文件移入的子目录名(相对整理目录)
+duplicate_dir_name: duplicate
+
+# 移动模式:
+#   move - 直接移动(本地磁盘默认)
+#   copy - 复制 → hash 校验 → 删源(本地→NAS 等跨设备场景,防中断丢数据)
+mode: move
+
+# 数据库路径,留空使用默认 ~/.phototidy/photos.db
+db_path: ''

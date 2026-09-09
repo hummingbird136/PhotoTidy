@@ -1,0 +1,20 @@
+# 可选的 pre-commit 配置(与 CI 使用同一套 ruff 检查)
+# 使用方式: pip install pre-commit && pre-commit install
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.1
+    hooks:
+      - id: ruff
+        name: ruff check --fix
+        args: [--fix]
+      - id: ruff-format
+        name: ruff format
+
+  # 提交信息格式校验:<type>: <简短描述>
+  - repo: local
+    hooks:
+      - id: commit-msg-check
+        name: commit-msg 格式校验
+        language: system
+        stages: [commit-msg]
+        entry: 'grep -qE "^(feat|fix|docs|refactor|chore)(\(.+\))?: |^(Merge|Revert|Initial commit)"'

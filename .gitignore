@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+
+# 虚拟环境
+venv/
+.venv/
+.venv-gui/
+
+# 本地数据库与日志
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+logs/
+
+# PyInstaller 构建产物(spec 保留便于复现)
+scripts/build/
+scripts/dist/
+scripts/.pyinst-cache/
+# 根目录输出(release.yml 同款命令的 dist/workpath 与 spec)
+/dist/
+/build/
+/PhotoTidy.spec
+
+# 本地打包验收产物
+/PhotoTidy-macos.zip
+/PhotoTidy-macos.zip.sha256
+
+# 工具缓存与系统文件
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# 本地环境与密钥文件
+.env
+.env.*
+*.pem
+*.key
+
+# 本地临时文档(不入库)
+/docs/

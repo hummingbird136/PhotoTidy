@@ -1,0 +1,12 @@
+# 提交信息格式:<type>: <简短描述>
+# type 只能是:feat / fix / docs / refactor / chore
+#
+# 示例:
+#   feat: GUI 增加整理进度条
+#   fix(cli): 修复 --dry-run 下误写数据库的问题
+#   docs: 补充 Windows 打包说明
+#
+# 第一行(type: 描述)填写完成后,删除以下占位行
+feat:
+
+# --- 以下为可删的说明区,不会进入提交信息 ---

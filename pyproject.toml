@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phototidy"
+version = "0.1.0"
+description = "照片/视频扫描、去重、按拍摄日期归档的本地整理工具(CLI + GUI)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Environment :: MacOS X",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "pillow>=10.4",
+    "mutagen>=1.47.0",
+    "python-dateutil>=2.8",
+    "typer>=0.12",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+gui = ["customtkinter>=5.2"]
+dev = ["pytest>=8.0", "piexif>=1.1", "ruff>=0.4"]
+
+[project.scripts]
+phototidy = "phototidy.cli:entry"
+phototidy-gui = "phototidy.gui:entry"
+
+[tool.setuptools.packages.find]
+include = ["phototidy*"]
+
+[tool.ruff]
+# 极简配置:只用 ruff 默认规则
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+ignore = [
+    "BLE001", # 捕获裸 Exception 是设计约定:单文件失败记录后继续,保证整体不中断
+    "DTZ006", # 照片拍摄时间为本地 naive 时间(来自 EXIF/文件 mtime),刻意不带时区
+    "DTZ007",
+]
