@@ -732,6 +732,10 @@ class App(ctk.CTk):
 
 def entry() -> None:
     log_path = setup_file_logger()
+    if "--selftest" in sys.argv:  # 打包冒烟:预先标记已读首次提示,避免 messagebox 阻塞
+        os.makedirs(os.path.dirname(_NOTICE_FLAG), exist_ok=True)
+        with open(_NOTICE_FLAG, "w") as f:
+            f.write("1")
     app = App()
     app.log_path = log_path  # 供执行失败消息指向具体日志文件
     if "--selftest" in sys.argv:  # 打包冒烟:实例化后销毁,不进主循环
