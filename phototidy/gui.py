@@ -290,7 +290,7 @@ class App(ctk.CTk):
         self.btn_reset.pack_forget()
         self.btn_reveal = ctk.CTkButton(
             bottom,
-            text="在访达中显示整理结果",
+            text="在输出目录中显示整理结果",
             height=26,
             font=("", 12),
             corner_radius=8,
@@ -405,15 +405,19 @@ class App(ctk.CTk):
         """在系统文件管理器中打开第一个目标目录(macOS 访达 / Windows 资源管理器)。"""
         if not paths:
             return
-        target = str(paths[0])
-        if sys.platform == "darwin":
-            cmd = ["open", target]
-        elif sys.platform == "win32":
-            cmd = ["explorer", target]
-        else:
-            cmd = ["xdg-open", target]
+        target = os.path.normpath(str(paths[0]))
+        if not os.path.isdir(target):
+            self._append_log(f"目标目录不存在: {target}")
+            return
         try:
-            subprocess.run(cmd, check=False)
+            if sys.platform == "win32":
+                # Windows 用 os.startfile 打开资源管理器;explorer.exe 经 subprocess 传参
+                # 不可靠(正斜杠会被当成命令行开关),且 explorer 是 GUI 程序不走控制台。
+                os.startfile(target)
+            elif sys.platform == "darwin":
+                subprocess.run(["open", target], check=False)
+            else:
+                subprocess.run(["xdg-open", target], check=False)
         except OSError as exc:  # 无桌面环境 / 缺 xdg-open
             self._append_log(f"无法打开文件管理器: {exc}")
 
@@ -498,7 +502,7 @@ class App(ctk.CTk):
             self.rows_frame,
             text=(
                 f"整理完成:已处理 {moved} 项,源文件已移入目标目录。\n"
-                "可点下方「在访达中显示整理结果」查看;再点【预览计划】可复查是否还有可整理项。"
+                "可点下方「在输出目录中显示整理结果」查看;再点【预览计划】可复查是否还有可整理项。"
             ),
             justify="left",
             anchor="w",
