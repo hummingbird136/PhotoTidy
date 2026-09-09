@@ -1,6 +1,6 @@
-"""可重复构造的测试素材生成脚本(阶段 4 测试素材集承接 CI 端到端测试)。
+"""可重复构造的测试素材生成脚本,供 CI 端到端测试复用。
 
-用法: python scripts/make_fixtures.py <dest_dir>
+用法: python tests/make_fixtures.py <dest_dir>
 产出子集:带 EXIF 照片对(重复)、无 EXIF 照片、同名不同内容对、非媒体干扰文件。
 """
 

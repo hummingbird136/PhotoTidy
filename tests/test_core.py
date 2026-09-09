@@ -8,8 +8,10 @@
 import os
 
 import pytest
+from typer.testing import CliRunner
 
 from phototidy import db as db_module
+from phototidy.cli import app as cli_app
 from phototidy.config import Config
 from phototidy.core import deduplicator, organizer, scanner
 from phototidy.core.fileops import sanitize_name, unique_path
@@ -373,3 +375,105 @@ def test_dedupe_keeps_original_over_copy_suffix(tmp_path, cfg):
     assert len(plan) == 1
     assert plan[0].src == str(copy)  # 复制件被计划移出
     assert str(orig) in plan[0].reason  # 原件被保留,写进移出理由
+
+
+def test_config_example_loads_public_defaults():
+    """公开示例配置应可直接加载,且保持默认安全模式。"""
+    cfg = Config.load("configs/config.example.yaml")
+
+    assert cfg.mode == "move"
+    assert cfg.duplicate_dir_name == "duplicate"
+    assert cfg.date_folder_format == "%Y-%m-%d"
+    assert ".heic" in cfg.image_formats
+    assert ".mov" in cfg.video_formats
+    assert cfg.db_path == ""
+
+
+def test_config_custom_overrides_and_ignores_unknown_keys(tmp_path):
+    """用户 YAML 只覆盖公开字段,未知字段不会污染运行配置。"""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+image_formats:
+  - .jpg
+  - .gif
+video_formats:
+  - .mp4
+date_folder_format: '%Y/%m-%d'
+duplicate_dir_name: dupes
+mode: copy
+db_path: custom.db
+unknown_key: should_be_ignored
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = Config.load(str(config_path))
+
+    assert cfg.image_formats == [".jpg", ".gif"]
+    assert cfg.video_formats == [".mp4"]
+    assert cfg.date_folder_format == "%Y/%m-%d"
+    assert cfg.duplicate_dir_name == "dupes"
+    assert cfg.mode == "copy"
+    assert cfg.db_path == "custom.db"
+    assert not hasattr(cfg, "unknown_key")
+    assert cfg.media_type_for("example.GIF") == "photo"
+
+
+def test_cli_dry_run_commands_do_not_move_files(media_tree, tmp_path):
+    """CLI 默认只预览:dedupe/organize/run 不带 --execute 时不移动文件。"""
+    src, _root = media_tree
+    db = str(tmp_path / "cli.db")
+    runner = CliRunner()
+
+    scan_result = runner.invoke(cli_app, ["--db", db, "scan", str(src)])
+    assert scan_result.exit_code == 0, scan_result.output
+
+    dedupe_result = runner.invoke(cli_app, ["--db", db, "dedupe", str(src)])
+    assert dedupe_result.exit_code == 0, dedupe_result.output
+    assert not (src / "duplicate").exists()
+    assert (src / "a.jpg").exists()
+    assert (src / "a_dup.jpg").exists()
+
+    organize_result = runner.invoke(cli_app, ["--db", db, "organize", str(src)])
+    assert organize_result.exit_code == 0, organize_result.output
+    assert not (src / "2023-01-15").exists()
+    assert (src / "b.jpg").exists()
+
+    run_result = runner.invoke(cli_app, ["--db", db, "run", str(src)])
+    assert run_result.exit_code == 0, run_result.output
+    assert not (src / "duplicate").exists()
+    assert not (src / "2023-02-20").exists()
+
+    stats_result = runner.invoke(cli_app, ["--db", db, "stats"])
+    assert stats_result.exit_code == 0, stats_result.output
+    assert "total" in stats_result.output
+
+    reset_result = runner.invoke(cli_app, ["--db", db, "reset-moved", str(src)])
+    assert reset_result.exit_code == 0, reset_result.output
+
+
+def test_cli_execute_dedupe_and_organize_success(media_tree, tmp_path):
+    """CLI 执行路径成功后,重复文件进 duplicate,剩余文件按日期归档。"""
+    src, _root = media_tree
+    db = str(tmp_path / "cli-execute.db")
+    runner = CliRunner()
+
+    scan_result = runner.invoke(cli_app, ["--db", db, "scan", str(src)])
+    assert scan_result.exit_code == 0, scan_result.output
+
+    dedupe_result = runner.invoke(cli_app, ["--db", db, "dedupe", str(src), "--execute"])
+    assert dedupe_result.exit_code == 0, dedupe_result.output
+    assert (src / "duplicate").is_dir()
+    assert len(list((src / "duplicate").glob("*.jpg"))) == 1
+
+    organize_result = runner.invoke(cli_app, ["--db", db, "organize", str(src), "--execute"])
+    assert organize_result.exit_code == 0, organize_result.output
+    assert (src / "2023-01-15").is_dir()
+    assert (src / "2023-02-20").is_dir()
+    assert len(list((src / "2023-01-15").glob("*.jpg"))) == 1
+    assert len(list((src / "2023-02-20").glob("*.jpg"))) == 1
+
+    stats_result = runner.invoke(cli_app, ["--db", db, "stats"])
+    assert stats_result.exit_code == 0, stats_result.output
+    assert '"moved"' in stats_result.output
