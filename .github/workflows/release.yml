@@ -1,0 +1,70 @@
+# 打包流水线:push 到 main 时双平台构建,产物作为 workflow artifact 留存(30 天)。
+# 公开仓库的 macOS/Windows runner 免费,无需账单。
+# 两平台均先跑 --selftest 冒烟检查;产物附带 .sha256 校验和。
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: 安装依赖
+        run: pip install -e '.[gui]' pyinstaller
+      - name: 打包(windowed app)
+        run: |
+          python -m PyInstaller --noconfirm --clean --windowed \
+            --name PhotoTidy --collect-all customtkinter \
+            --distpath dist --workpath build scripts/package_gui.py
+      - name: 冒烟自检
+        run: dist/PhotoTidy.app/Contents/MacOS/PhotoTidy --selftest
+      - name: 压缩产物
+        run: ditto -c -k --sequesterRsrc --keepParent dist/PhotoTidy.app PhotoTidy-macos.zip
+      - name: 生成 SHA256 校验和
+        run: shasum -a 256 PhotoTidy-macos.zip > PhotoTidy-macos.zip.sha256
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhotoTidy-macos
+          path: |
+            PhotoTidy-macos.zip
+            PhotoTidy-macos.zip.sha256
+          retention-days: 30
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: 安装依赖
+        run: pip install -e ".[gui]" pyinstaller
+      - name: 打包(单 exe)
+        run: |
+          python -m PyInstaller --noconfirm --clean --windowed --onefile `
+            --name PhotoTidy --collect-all customtkinter scripts/package_gui.py
+      - name: 冒烟自检
+        run: ./dist/PhotoTidy.exe --selftest
+      - name: 生成 SHA256 校验和
+        run: |
+          $hash = (Get-FileHash -Algorithm SHA256 dist/PhotoTidy.exe).Hash.ToLower()
+          "$hash  PhotoTidy.exe" | Out-File -Encoding ascii PhotoTidy.exe.sha256
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhotoTidy-windows
+          path: |
+            dist/PhotoTidy.exe
+            PhotoTidy.exe.sha256
+          retention-days: 30
