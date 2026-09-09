@@ -27,6 +27,7 @@ scripts/.pyinst-cache/
 # 本地打包验收产物
 /PhotoTidy-macos.zip
 /PhotoTidy-macos.zip.sha256
+/PhotoTidy.exe.sha256
 
 # 工具缓存与系统文件
 .pytest_cache/
