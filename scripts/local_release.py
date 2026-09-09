@@ -15,7 +15,6 @@
 
 import hashlib
 import os
-import shutil
 import subprocess
 import sys
 
@@ -34,9 +33,22 @@ def sha256_file(path: str) -> str:
 
 
 def build_windows() -> list[str]:
-    run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
-         "--windowed", "--onefile", "--name", "PhotoTidy",
-         "--collect-all", "customtkinter", "scripts/package_gui.py"])
+    run(
+        [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "--noconfirm",
+            "--clean",
+            "--windowed",
+            "--onefile",
+            "--name",
+            "PhotoTidy",
+            "--collect-all",
+            "customtkinter",
+            "scripts/package_gui.py",
+        ]
+    )
     exe = os.path.join("dist", "PhotoTidy.exe")
     sha = sha256_file(exe)
     with open("PhotoTidy.exe.sha256", "w", encoding="ascii") as f:
@@ -46,9 +58,25 @@ def build_windows() -> list[str]:
 
 
 def build_macos() -> list[str]:
-    run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
-         "--windowed", "--name", "PhotoTidy", "--collect-all", "customtkinter",
-         "--distpath", "dist", "--workpath", "build", "scripts/package_gui.py"])
+    run(
+        [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "--noconfirm",
+            "--clean",
+            "--windowed",
+            "--name",
+            "PhotoTidy",
+            "--collect-all",
+            "customtkinter",
+            "--distpath",
+            "dist",
+            "--workpath",
+            "build",
+            "scripts/package_gui.py",
+        ]
+    )
     app = os.path.join("dist", "PhotoTidy.app")
     zip_name = "PhotoTidy-macos.zip"
     if os.path.exists(zip_name):
@@ -84,15 +112,26 @@ def main():
     # 上传到 GitHub Release(若不存在则创建)
     repo = "hummingbird136/PhotoTidy"
     print(f"\n上传到 {repo} release {tag} ...")
-    cmd = ["gh", "release", "upload", tag, *artifacts,
-           "--repo", repo, "--clobber"]
-    result = subprocess.run(cmd)
+    cmd = ["gh", "release", "upload", tag, *artifacts, "--repo", repo, "--clobber"]
+    result = subprocess.run(cmd, check=False)
     if result.returncode != 0:
         # release 不存在,创建它
         print("release 不存在,创建中...")
-        run(["gh", "release", "create", tag, *artifacts,
-             "--repo", repo, "--title", tag,
-             "--notes", f"PhotoTidy {tag}"])
+        run(
+            [
+                "gh",
+                "release",
+                "create",
+                tag,
+                *artifacts,
+                "--repo",
+                repo,
+                "--title",
+                tag,
+                "--notes",
+                f"PhotoTidy {tag}",
+            ]
+        )
     else:
         print("上传完成")
 

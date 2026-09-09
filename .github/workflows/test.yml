@@ -29,7 +29,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e '.[dev]'
-      - run: python -m py_compile phototidy/*.py phototidy/core/*.py
+      - run: python -m compileall phototidy/
       - run: pytest tests/ -q
 
   gui-selftest:
