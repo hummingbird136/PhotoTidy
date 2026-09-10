@@ -1,15 +1,31 @@
-# 打包流水线:push 到 main 时双平台构建,上传到 Actions artifact 并更新「latest」Release。
+# 打包流水线:双平台构建 + 发布 Release + 同步 Gitee 发行版。
 # 公开仓库的 macOS/Windows runner 免费,无需账单。
 # 两平台均先跑 --selftest 冒烟检查;产物附带 .sha256 校验和。
+#
+# 触发与产物:
+#   push main    → 更新滚动「latest」Release(每次 push 覆盖,make_latest = true)
+#   push tag v*  → 创建固定版本 Release(如 v0.1.0),不抢占 latest(版本锚点)
+#   workflow_dispatch → 手动触发,按当前 ref 走上面两条之一
+#
+# Gitee 同步:仅当仓库 Secrets 配置了 GITEE_TOKEN 时执行;未配置则整段跳过(不亮红灯)。
+#   GITEE_TOKEN 申请:Gitee → 设置 → 私人令牌 → 勾选 projects 权限
+#   配置位置:GitHub 仓库 → Settings → Secrets and variables → Actions → New repository secret
 name: release
 
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
   contents: write
+
+env:
+  # push tag 时用 tag 名(如 v0.1.0);push main 时用 latest
+  REL_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
+  # 是否 tag 触发(字符串 'true'/'false')
+  IS_TAG: ${{ startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build-macos:
@@ -40,18 +56,22 @@ jobs:
             PhotoTidy-macos.zip
             PhotoTidy-macos.zip.sha256
           retention-days: 30
-      - name: 更新 latest Release
+      - name: 发布到 Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: latest
-          make_latest: true
+          tag_name: ${{ env.REL_TAG }}
+          name: ${{ env.REL_TAG }}
+          # tag 触发时不抢占「latest」,保证滚动版始终指向 main 最新构建
+          make_latest: ${{ env.IS_TAG != 'true' }}
           overwrite: true
           body: |
-            PhotoTidy 最新构建(main 分支自动打包)。
+            PhotoTidy ${{ env.REL_TAG }}
 
             - macOS: 解压 PhotoTidy-macos.zip,将 PhotoTidy.app 拖到「应用程序」
             - Windows: 双击 PhotoTidy.exe 运行(绿色软件,不写注册表)
+
+            首次打开需放行:macOS 右键 App → 打开;Windows 点「更多信息 → 仍要运行」。
+            国内用户可到 Gitee 镜像下载:https://gitee.com/hummingbird136/PhotoTidy/releases
           files: |
             PhotoTidy-macos.zip
             PhotoTidy-macos.zip.sha256
@@ -83,18 +103,67 @@ jobs:
             dist/PhotoTidy.exe
             PhotoTidy.exe.sha256
           retention-days: 30
-      - name: 更新 latest Release
+      - name: 发布到 Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: latest
-          make_latest: true
+          tag_name: ${{ env.REL_TAG }}
+          name: ${{ env.REL_TAG }}
+          make_latest: ${{ env.IS_TAG != 'true' }}
           overwrite: true
           body: |
-            PhotoTidy 最新构建(main 分支自动打包)。
+            PhotoTidy ${{ env.REL_TAG }}
 
             - macOS: 解压 PhotoTidy-macos.zip,将 PhotoTidy.app 拖到「应用程序」
             - Windows: 双击 PhotoTidy.exe 运行(绿色软件,不写注册表)
+
+            首次打开需放行:macOS 右键 App → 打开;Windows 点「更多信息 → 仍要运行」。
+            国内用户可到 Gitee 镜像下载:https://gitee.com/hummingbird136/PhotoTidy/releases
           files: |
             dist/PhotoTidy.exe
             PhotoTidy.exe.sha256
+
+  # 双平台产物齐了再同步 Gitee,避免只传一半。
+  # ⚠️ gitee-target-commitish 必须显式写 main —— 该 action 默认 master,写错会导致 tag 关联失败。
+  # ⚠️ Gitee 单附件 ≤100MB、仓库总附件 ≤1GB;本项目 4 个资产合计约 36MB,远低于限制。
+  sync-gitee:
+    needs: [build-macos, build-windows]
+    if: ${{ secrets.GITEE_TOKEN != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 下载 macOS 产物
+        uses: actions/download-artifact@v4
+        with:
+          name: PhotoTidy-macos
+          path: assets
+      - name: 下载 Windows 产物
+        uses: actions/download-artifact@v4
+        with:
+          name: PhotoTidy-windows
+          path: assets
+      - name: 列出待同步资产(对账用,应恰好 4 个)
+        run: |
+          echo "待同步资产:"
+          find assets -type f | sort
+          echo "资产数: $(find assets -type f | wc -l)"
+      - name: 同步到 Gitee 发行版
+        uses: YuZhiYuanOrg/release-sync@v1
+        with:
+          platforms: 'gitee'
+          tag: ${{ env.REL_TAG }}
+          release-name: ${{ env.REL_TAG }}
+          release-body: |
+            PhotoTidy ${{ env.REL_TAG }}
+
+            - macOS: 解压 PhotoTidy-macos.zip,将 PhotoTidy.app 拖到「应用程序」
+            - Windows: 双击 PhotoTidy.exe 运行(绿色软件,不写注册表)
+
+            首次打开需放行:macOS 右键 App → 打开;Windows 点「更多信息 → 仍要运行」。
+            源码同步自 GitHub:https://github.com/hummingbird136/PhotoTidy
+          draft: 'false'
+          prerelease: 'false'
+          gitee-token: ${{ secrets.GITEE_TOKEN }}
+          gitee-owner: 'hummingbird136'
+          gitee-repo: 'PhotoTidy'
+          gitee-target-commitish: 'main'
+          asset-files: |
+            assets/**
