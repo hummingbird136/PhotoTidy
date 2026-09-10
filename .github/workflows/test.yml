@@ -122,8 +122,18 @@ jobs:
                   if term.lower() in lower:
                       failures.append((path_text, f"blocked term: {term}"))
               for pattern in sensitive_patterns:
-                  if pattern.search(text):
-                      failures.append((path_text, f"sensitive regex: {pattern.pattern[:40]}"))
+                  for match in pattern.finditer(text):
+                      # GitHub Actions 的 secret 引用(${ { secrets.XXX } })不是硬编码密钥,
+                      # 例如 `gitee-token: ${{ secrets.GITEE_TOKEN }}` 会被 token 正则误伤。
+                      # 判断依据:匹配的冒号/等号之后、本行结束之前是否出现表达式引用。
+                      line_end = text.find("\n", match.end())
+                      tail = text[match.end(): line_end if line_end != -1 else len(text)]
+                      if "${{" in tail or "secrets." in tail:
+                          continue
+                      failures.append(
+                          (path_text, f"sensitive regex: {pattern.pattern[:40]}")
+                      )
+                      break
 
           if failures:
               for path_text, reason in failures:

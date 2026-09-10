@@ -125,27 +125,46 @@ jobs:
   # 双平台产物齐了再同步 Gitee,避免只传一半。
   # ⚠️ gitee-target-commitish 必须显式写 main —— 该 action 默认 master,写错会导致 tag 关联失败。
   # ⚠️ Gitee 单附件 ≤100MB、仓库总附件 ≤1GB;本项目 4 个资产合计约 36MB,远低于限制。
+  #
+  # ⚠️ 不能用 job 级 `if: secrets.GITEE_TOKEN != ''` —— GitHub 不允许在 jobs.<id>.if 引用
+  #    secrets context,会导致表达式求值失败、workflow 0 秒失败(2026-09-10 踩过)。
+  #    正确做法:先用一个 step 把 secret 读到 env,输出布尔,后续 step 用该输出做 if。
   sync-gitee:
     needs: [build-macos, build-windows]
-    if: ${{ secrets.GITEE_TOKEN != '' }}
     runs-on: ubuntu-latest
     steps:
+      - name: 检查 Gitee 凭证是否已配置
+        id: gitee_cred
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          if [ -n "$GITEE_TOKEN" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+            echo "GITEE_TOKEN 已配置,将同步 Gitee 发行版"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::GITEE_TOKEN 未配置,跳过 Gitee 同步(不影响 GitHub Release)"
+          fi
       - name: 下载 macOS 产物
+        if: steps.gitee_cred.outputs.has_token == 'true'
         uses: actions/download-artifact@v4
         with:
           name: PhotoTidy-macos
           path: assets
       - name: 下载 Windows 产物
+        if: steps.gitee_cred.outputs.has_token == 'true'
         uses: actions/download-artifact@v4
         with:
           name: PhotoTidy-windows
           path: assets
       - name: 列出待同步资产(对账用,应恰好 4 个)
+        if: steps.gitee_cred.outputs.has_token == 'true'
         run: |
           echo "待同步资产:"
           find assets -type f | sort
           echo "资产数: $(find assets -type f | wc -l)"
       - name: 同步到 Gitee 发行版
+        if: steps.gitee_cred.outputs.has_token == 'true'
         uses: YuZhiYuanOrg/release-sync@v1
         with:
           platforms: 'gitee'
