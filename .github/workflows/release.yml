@@ -123,7 +123,10 @@ jobs:
             PhotoTidy.exe.sha256
 
   # 双平台产物齐了再同步 Gitee,避免只传一半。
-  # ⚠️ gitee-target-commitish 必须显式写 main —— 该 action 默认 master,写错会导致 tag 关联失败。
+  # 用自写脚本同步(scripts/sync_release_to_gitee.py):直接调用 Gitee 官方 API,
+  # release 不存在时用 target_commitish=main 让 Gitee 自动创建 tag。
+  # ⚠️ 曾用 YuZhiYuanOrg/release-sync@v1,其手动 POST /tags 建 tag 的参数与官方 API
+  #    不符,latest 标签不存在时必然 400 失败(2026-09-11 踩过)。
   # ⚠️ Gitee 单附件 ≤100MB、仓库总附件 ≤1GB;本项目 4 个资产合计约 36MB,远低于限制。
   #
   # ⚠️ 不能用 job 级 `if: secrets.GITEE_TOKEN != ''` —— GitHub 不允许在 jobs.<id>.if 引用
@@ -133,6 +136,7 @@ jobs:
     needs: [build-macos, build-windows]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: 检查 Gitee 凭证是否已配置
         id: gitee_cred
         env:
@@ -165,24 +169,7 @@ jobs:
           echo "资产数: $(find assets -type f | wc -l)"
       - name: 同步到 Gitee 发行版
         if: steps.gitee_cred.outputs.has_token == 'true'
-        uses: YuZhiYuanOrg/release-sync@v1
-        with:
-          platforms: 'gitee'
-          tag: ${{ env.REL_TAG }}
-          release-name: ${{ env.REL_TAG }}
-          release-body: |
-            PhotoTidy ${{ env.REL_TAG }}
-
-            - macOS: 解压 PhotoTidy-macos.zip,将 PhotoTidy.app 拖到「应用程序」
-            - Windows: 双击 PhotoTidy.exe 运行(绿色软件,不写注册表)
-
-            首次打开需放行:macOS 右键 App → 打开;Windows 点「更多信息 → 仍要运行」。
-            源码同步自 GitHub:https://github.com/hummingbird136/PhotoTidy
-          draft: 'false'
-          prerelease: 'false'
-          gitee-token: ${{ secrets.GITEE_TOKEN }}
-          gitee-owner: 'hummingbird136'
-          gitee-repo: 'PhotoTidy'
-          gitee-target-commitish: 'main'
-          asset-files: |
-            assets/**
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_RELEASE_TAG: ${{ env.REL_TAG }}
+        run: python scripts/sync_release_to_gitee.py
