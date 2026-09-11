@@ -99,13 +99,15 @@ def main() -> int:
     for f in files:
         print(f"  - {f.name} ({f.stat().st_size // 1024} KB)")
 
-    # 1) 查找是否已有同名 release
+    # 1) 查找是否已有同名 release(列表接口;tags/ 接口对不存在返回 null,不可靠)
     print(f"\n检查 Gitee release {tag} ...")
-    try:
-        existing = gitee_request(
-            "GET",
-            f"{GITEE_API}/repos/{GITEE_REPO}/releases/tags/{urllib.parse.quote(tag)}",
-        )
+    releases = gitee_request(
+        "GET",
+        f"{GITEE_API}/repos/{GITEE_REPO}/releases?per_page=100",
+    )
+    existing = next((r for r in releases if r.get("tag_name") == tag), None)
+
+    if existing:
         release_id = existing["id"]
         print(f"已有 release(id={release_id}),更新并清理旧资产 ...")
         for asset in existing.get("assets", []):
@@ -118,9 +120,7 @@ def main() -> int:
                 print(f"  删除旧资产 {asset['name']}")
             except Exception as e:
                 print(f"  删除旧资产失败(可忽略): {e}")
-    except RuntimeError as e:
-        if "404" not in str(e):
-            raise
+    else:
         # 2) 不存在则创建;tag 由 Gitee 基于 target_commitish 自动创建
         print(f"没有该 release,创建中(target_commitish={GITEE_TARGET_COMMITISH}) ...")
         created = gitee_request(
