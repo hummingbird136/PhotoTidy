@@ -63,7 +63,7 @@ jobs:
           name: ${{ env.REL_TAG }}
           # tag 触发时不抢占「latest」,保证滚动版始终指向 main 最新构建
           make_latest: ${{ env.IS_TAG != 'true' }}
-          overwrite: true
+          overwrite_files: true
           body: |
             PhotoTidy ${{ env.REL_TAG }}
 
@@ -109,7 +109,7 @@ jobs:
           tag_name: ${{ env.REL_TAG }}
           name: ${{ env.REL_TAG }}
           make_latest: ${{ env.IS_TAG != 'true' }}
-          overwrite: true
+          overwrite_files: true
           body: |
             PhotoTidy ${{ env.REL_TAG }}
 
