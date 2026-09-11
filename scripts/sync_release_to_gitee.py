@@ -7,7 +7,7 @@
 前置:
     - 环境变量 GITEE_TOKEN:Gitee 私人令牌(projects 权限)
     - 环境变量 GITEE_RELEASE_TAG:要同步的 tag(如 latest 或 v0.1.0)
-    - 待上传文件位于工作目录 artifacts/ 下(由 actions/download-artifact 下载)
+    - 待上传文件位于工作目录 assets/ 下(由 actions/download-artifact 下载)
 
 与第三方 action(release-sync)不同,这里直接调用 Gitee 官方 API:
     - 创建 release 时用 target_commitish=main,tag 不存在时由 Gitee 自动创建
@@ -27,7 +27,7 @@ from pathlib import Path
 GITEE_API = "https://gitee.com/api/v5"
 GITEE_REPO = "hummingbird136/PhotoTidy"
 GITEE_TARGET_COMMITISH = "main"  # Gitee 仓库默认分支,release 关联的 commit
-ARTIFACTS_DIR = Path("artifacts")
+ARTIFACTS_DIR = Path("assets")
 
 
 def gitee_request(method: str, url: str, data: dict | None = None) -> dict:
