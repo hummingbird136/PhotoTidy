@@ -35,8 +35,8 @@ GITEE_REPO = "hummingbird136/PhotoTidy"
 GITEE_TARGET_COMMITISH = "main"  # Gitee 仓库默认分支,release 关联的 commit
 ARTIFACTS_DIR = Path("assets")
 
-TIMEOUT_API = 60      # 普通 API 请求(秒)
-TIMEOUT_UPLOAD = 600  # 附件上传(秒,跨境大文件)
+TIMEOUT_API = 60       # 普通 API 请求(秒)
+TIMEOUT_UPLOAD = 1800  # 附件上传(秒):GitHub runner 到 Gitee 跨境大文件实测需 10~15 分钟
 MAX_ATTEMPTS = 4
 _RETRIABLE_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
 _TOKEN_RE = re.compile(r"(access_token=)[^&\s\"']+", re.IGNORECASE)
@@ -57,7 +57,7 @@ def open_with_retry(req: urllib.request.Request, timeout: int):
             last_err = e
             if e.code not in _RETRIABLE_STATUS or attempt == MAX_ATTEMPTS - 1:
                 raise
-        except (urllib.error.URRError, TimeoutError, OSError) as e:
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
             last_err = e
             if attempt == MAX_ATTEMPTS - 1:
                 raise
@@ -156,17 +156,26 @@ def main() -> int:
 
     if existing:
         release_id = existing["id"]
-        print(f"已有 release(id={release_id}),更新并清理旧资产 ...")
-        for asset in existing.get("assets", []):
+        print(f"已有 release(id={release_id}),先清空旧附件,再重新上传 ...")
+        # release 详情里的 assets 只有 name 无 id;必须调 attach_files 列表才有 id。
+        # Gitee 同名附件会"堆积"而非覆盖,不清空会留下历史重复文件。
+        attachments = gitee_request(
+            "GET",
+            f"{GITEE_API}/repos/{GITEE_REPO}/releases/{release_id}/attach_files?per_page=100",
+        )
+        for att in attachments:
+            att_id, att_name = att.get("id"), att.get("name", "?")
+            if not att_id:
+                continue
             try:
                 gitee_request(
                     "DELETE",
-                    f"{GITEE_API}/repos/{GITEE_REPO}/releases/{release_id}/assets/"
-                    f"{asset['id']}",
+                    f"{GITEE_API}/repos/{GITEE_REPO}/releases/{release_id}/"
+                    f"attach_files/{att_id}",
                 )
-                print(f"  删除旧资产 {asset['name']}")
+                print(f"  删除旧附件 {att_name}(id={att_id})")
             except Exception as e:
-                print(f"  删除旧资产失败(可忽略): {redact(str(e))}")
+                print(f"  删除旧附件失败 {att_name}(可忽略): {redact(str(e))}")
     else:
         # 2) 不存在则创建;tag 由 Gitee 基于 target_commitish 自动创建
         print(f"没有该 release,创建中(target_commitish={GITEE_TARGET_COMMITISH}) ...")

@@ -32,7 +32,24 @@ from pathlib import Path
 PYINSTALLER_VERSION = "6.21.0"
 
 ROOT = Path(__file__).resolve().parent.parent
-ENTRY = "scripts/package_gui.py"
+WORK_DIST = ROOT / "build" / "pyi-dist"   # PyInstaller 中间产物
+WORK_BUILD = ROOT / "build" / "pyi-work"
+OUT_DIR = ROOT / "release"               # 最终可发布文件
+
+# PyInstaller 入口必须是独立的顶层脚本:phototidy/gui.py 内部用了相对导入,
+# 直接作为入口会变成无包上下文的 __main__ 而报 ImportError。
+# 因此在构建目录动态生成一个薄壳(已被 .gitignore 忽略,不占 scripts/ 文件数)。
+ENTRY_STUB = WORK_BUILD / "entry.py"
+
+
+def write_entry_stub() -> Path:
+    WORK_BUILD.mkdir(parents=True, exist_ok=True)
+    ENTRY_STUB.write_text(
+        "from phototidy.gui import entry\n\n"
+        'if __name__ == "__main__":\n    entry()\n',
+        encoding="utf-8",
+    )
+    return ENTRY_STUB
 
 # Windows 控制台默认可能是 cp1252/cp936,直接 print 中文会 UnicodeEncodeError
 # (GitHub 的 windows runner 即如此)。统一强制 UTF-8 输出。
@@ -41,11 +58,7 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, OSError):
         pass
-WORK_DIST = ROOT / "build" / "pyi-dist"   # PyInstaller 中间产物
-WORK_BUILD = ROOT / "build" / "pyi-work"
-OUT_DIR = ROOT / "release"               # 最终可发布文件
-
-# PyInstaller 公共参数(平台差异仅在 onefile / BUNDLE,由此处统一维护)
+# PyInstaller 公共参数(平台差异仅在 onefile / BUNDLE,由此处统一维护;入口单独追加)
 _COMMON_ARGS = [
     "--noconfirm",
     "--clean",
@@ -58,7 +71,8 @@ _COMMON_ARGS = [
     str(WORK_DIST),
     "--workpath",
     str(WORK_BUILD),
-    ENTRY,
+    "--specpath",
+    str(WORK_BUILD),
 ]
 
 
@@ -94,7 +108,8 @@ def selftest(executable: Path) -> None:
 
 
 def build_windows(do_selftest: bool) -> list[Path]:
-    run([sys.executable, "-m", "PyInstaller", "--onefile", *_COMMON_ARGS])
+    entry = write_entry_stub()
+    run([sys.executable, "-m", "PyInstaller", "--onefile", *_COMMON_ARGS, str(entry)])
     exe = WORK_DIST / "PhotoTidy.exe"
     if do_selftest:
         selftest(exe)
@@ -103,7 +118,8 @@ def build_windows(do_selftest: bool) -> list[Path]:
 
 
 def build_macos(do_selftest: bool) -> list[Path]:
-    run([sys.executable, "-m", "PyInstaller", *_COMMON_ARGS])
+    entry = write_entry_stub()
+    run([sys.executable, "-m", "PyInstaller", *_COMMON_ARGS, str(entry)])
     app = WORK_DIST / "PhotoTidy.app"
     if do_selftest:
         selftest(app / "Contents" / "MacOS" / "PhotoTidy")

@@ -15,17 +15,11 @@ venv/
 *.db-shm
 logs/
 
-# PyInstaller 构建产物(spec 保留便于复现)
-scripts/build/
-scripts/dist/
-scripts/.pyinst-cache/
-# 根目录输出(release.yml 同款命令的 dist/workpath 与 spec)
-/dist/
+# PyInstaller 构建产物(scripts/build.py 统一输出到 build/ 与 release/)
 /build/
-/PhotoTidy.spec
-
-# 统一构建脚本 scripts/build.py 的最终产物目录
+/dist/
 /release/
+/PhotoTidy.spec
 
 # 本地打包验收产物
 /PhotoTidy-macos.zip
