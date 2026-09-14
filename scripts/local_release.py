@@ -15,6 +15,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Windows 控制台默认编码可能无法输出中文,统一强制 UTF-8。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError):
+        pass
+
 REPO = "hummingbird136/PhotoTidy"
 OUT_DIR = Path("release")
 

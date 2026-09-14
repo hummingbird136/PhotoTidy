@@ -33,6 +33,14 @@ PYINSTALLER_VERSION = "6.21.0"
 
 ROOT = Path(__file__).resolve().parent.parent
 ENTRY = "scripts/package_gui.py"
+
+# Windows 控制台默认可能是 cp1252/cp936,直接 print 中文会 UnicodeEncodeError
+# (GitHub 的 windows runner 即如此)。统一强制 UTF-8 输出。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError):
+        pass
 WORK_DIST = ROOT / "build" / "pyi-dist"   # PyInstaller 中间产物
 WORK_BUILD = ROOT / "build" / "pyi-work"
 OUT_DIR = ROOT / "release"               # 最终可发布文件
