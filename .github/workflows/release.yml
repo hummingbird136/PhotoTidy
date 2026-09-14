@@ -1,15 +1,19 @@
-# 打包流水线:双平台构建 + 发布 Release + 同步 Gitee 发行版。
+# 打包流水线:matrix 双平台构建 + 发布 GitHub Release + 同步 Gitee 发行版。
 # 公开仓库的 macOS/Windows runner 免费,无需账单。
-# 两平台均先跑 --selftest 冒烟检查;产物附带 .sha256 校验和。
+#
+# 构建逻辑统一收敛在 scripts/build.py(CI 与本地发布共用,避免多处参数漂移):
+#   - 平台差异(Windows 单 exe / macOS .app→zip)、--selftest 冒烟、sha256 均由该脚本处理
+#   - 可发布文件统一输出到 release/
+#   - PyInstaller 版本由 build.py 单一锁定,保证构建可复现
 #
 # 触发与产物:
-#   push main    → 更新滚动「latest」Release(每次 push 覆盖,make_latest = true)
-#   push tag v*  → 创建固定版本 Release(如 v0.1.0),不抢占 latest(版本锚点)
-#   workflow_dispatch → 手动触发,按当前 ref 走上面两条之一
+#   push main       → 更新滚动「latest」Release(每次覆盖,make_latest = true)
+#   push tag v*     → 创建固定版本 Release(如 v0.1.0),不抢占 latest
+#   workflow_dispatch → 手动触发
 #
-# Gitee 同步:仅当仓库 Secrets 配置了 GITEE_TOKEN 时执行;未配置则整段跳过(不亮红灯)。
-#   GITEE_TOKEN 申请:Gitee → 设置 → 私人令牌 → 勾选 projects 权限
-#   配置位置:GitHub 仓库 → Settings → Secrets and variables → Actions → New repository secret
+# Gitee 同步:仅当 Secrets 配置了 GITEE_TOKEN 时执行;未配置则整段跳过(不亮红灯)。
+#   GITEE_TOKEN:Gitee → 设置 → 私人令牌 → 勾选 projects 权限
+#   配置位置:GitHub 仓库 → Settings → Secrets and variables → Actions
 name: release
 
 on:
@@ -18,9 +22,6 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 env:
   # push tag 时用 tag 名(如 v0.1.0);push main 时用 latest
   REL_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
@@ -28,35 +29,36 @@ env:
   IS_TAG: ${{ startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
-  build-macos:
-    runs-on: macos-14
+  build:
+    # 双平台用 matrix 展开,共享同一套步骤,消除 mac/win 两份重复配置
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            artifact: macos
+          - os: windows-latest
+            artifact: windows
+    runs-on: ${{ matrix.os }}
+    # 只有构建任务需要写 GitHub Release
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: 安装依赖
-        run: pip install -e '.[gui]' pyinstaller
-      - name: 打包(windowed app)
-        run: |
-          python -m PyInstaller --noconfirm --clean --windowed \
-            --name PhotoTidy --collect-all customtkinter \
-            --distpath dist --workpath build scripts/package_gui.py
-      - name: 冒烟自检
-        run: dist/PhotoTidy.app/Contents/MacOS/PhotoTidy --selftest
-      - name: 压缩产物
-        run: ditto -c -k --sequesterRsrc --keepParent dist/PhotoTidy.app PhotoTidy-macos.zip
-      - name: 生成 SHA256 校验和
-        run: shasum -a 256 PhotoTidy-macos.zip > PhotoTidy-macos.zip.sha256
+      - name: 安装依赖(锁定 PyInstaller 版本)
+        run: pip install -e ".[gui]" "pyinstaller==$(python scripts/build.py --print-pyinstaller-version)"
+      - name: 打包并冒烟自检
+        run: python scripts/build.py
       - name: 上传 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PhotoTidy-macos
-          path: |
-            PhotoTidy-macos.zip
-            PhotoTidy-macos.zip.sha256
+          name: PhotoTidy-${{ matrix.artifact }}
+          path: release/*
           retention-days: 30
-      - name: 发布到 Release
+      - name: 发布到 GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.REL_TAG }}
@@ -72,69 +74,17 @@ jobs:
 
             首次打开需放行:macOS 右键 App → 打开;Windows 点「更多信息 → 仍要运行」。
             国内用户可到 Gitee 镜像下载:https://gitee.com/hummingbird136/PhotoTidy/releases
-          files: |
-            PhotoTidy-macos.zip
-            PhotoTidy-macos.zip.sha256
-
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: 安装依赖
-        run: pip install -e ".[gui]" pyinstaller
-      - name: 打包(单 exe)
-        run: |
-          python -m PyInstaller --noconfirm --clean --windowed --onefile `
-            --name PhotoTidy --collect-all customtkinter scripts/package_gui.py
-      - name: 冒烟自检
-        run: ./dist/PhotoTidy.exe --selftest
-      - name: 生成 SHA256 校验和
-        run: |
-          $hash = (Get-FileHash -Algorithm SHA256 dist/PhotoTidy.exe).Hash.ToLower()
-          "$hash  PhotoTidy.exe" | Out-File -Encoding ascii PhotoTidy.exe.sha256
-      - name: 上传 artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: PhotoTidy-windows
-          path: |
-            dist/PhotoTidy.exe
-            PhotoTidy.exe.sha256
-          retention-days: 30
-      - name: 发布到 Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.REL_TAG }}
-          name: ${{ env.REL_TAG }}
-          make_latest: ${{ env.IS_TAG != 'true' }}
-          overwrite_files: true
-          body: |
-            PhotoTidy ${{ env.REL_TAG }}
-
-            - macOS: 解压 PhotoTidy-macos.zip,将 PhotoTidy.app 拖到「应用程序」
-            - Windows: 双击 PhotoTidy.exe 运行(绿色软件,不写注册表)
-
-            首次打开需放行:macOS 右键 App → 打开;Windows 点「更多信息 → 仍要运行」。
-            国内用户可到 Gitee 镜像下载:https://gitee.com/hummingbird136/PhotoTidy/releases
-          files: |
-            dist/PhotoTidy.exe
-            PhotoTidy.exe.sha256
+          files: release/*
 
   # 双平台产物齐了再同步 Gitee,避免只传一半。
-  # 用自写脚本同步(scripts/sync_release_to_gitee.py):直接调用 Gitee 官方 API,
-  # release 不存在时用 target_commitish=main 让 Gitee 自动创建 tag。
-  # ⚠️ 曾用 YuZhiYuanOrg/release-sync@v1,其手动 POST /tags 建 tag 的参数与官方 API
-  #    不符,latest 标签不存在时必然 400 失败(2026-09-11 踩过)。
-  # ⚠️ Gitee 单附件 ≤100MB、仓库总附件 ≤1GB;本项目 4 个资产合计约 36MB,远低于限制。
-  #
-  # ⚠️ 不能用 job 级 `if: secrets.GITEE_TOKEN != ''` —— GitHub 不允许在 jobs.<id>.if 引用
-  #    secrets context,会导致表达式求值失败、workflow 0 秒失败(2026-09-10 踩过)。
-  #    正确做法:先用一个 step 把 secret 读到 env,输出布尔,后续 step 用该输出做 if。
+  # 脚本直接调用 Gitee 官方 API,release 不存在时用 target_commitish=main 自动建 tag。
+  # 详见 scripts/sync_release_to_gitee.py(含超时/重试,跨境上传较慢属正常)。
   sync-gitee:
-    needs: [build-macos, build-windows]
+    needs: build
     runs-on: ubuntu-latest
+    # 同步只访问 Gitee,不需要 GitHub 写权限(最小权限原则)
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - name: 检查 Gitee 凭证是否已配置

@@ -24,6 +24,9 @@ scripts/.pyinst-cache/
 /build/
 /PhotoTidy.spec
 
+# 统一构建脚本 scripts/build.py 的最终产物目录
+/release/
+
 # 本地打包验收产物
 /PhotoTidy-macos.zip
 /PhotoTidy-macos.zip.sha256
