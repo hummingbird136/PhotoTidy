@@ -31,16 +31,22 @@ ARTIFACTS_DIR = Path("assets")
 
 
 def gitee_request(method: str, url: str, data: dict | None = None) -> dict:
-    """请求 Gitee API,自动带 access_token。"""
+    """请求 Gitee API,自动带 access_token。
+
+    Gitee 规定:POST/PUT 等带 body 的请求,access_token 放在表单字段里;
+    GET/DELETE 等无 body 的请求,access_token 放在 query string 里。
+    """
     token = os.environ["GITEE_TOKEN"]
     headers = {}
-    if data:
-        data = urllib.parse.urlencode(data).encode()
+    if data is not None:
+        payload = {**data, "access_token": token}
+        body = urllib.parse.urlencode(payload).encode()
         headers["Content-Type"] = "application/x-www-form-urlencoded"
+        req = urllib.request.Request(url, data=body, headers=headers, method=method)
     else:
         sep = "&" if "?" in url else "?"
         url = f"{url}{sep}access_token={urllib.parse.quote(token)}"
-    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+        req = urllib.request.Request(url, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req) as resp:
             body = resp.read()
